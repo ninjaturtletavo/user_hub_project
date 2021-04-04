@@ -104,6 +104,61 @@ function fetchData(url) {
     });
 }
 
+function fetchUserPosts(userId) {
+  return fetchData(`${BASE_URL}/users/${userId}/posts?_expand=user`);
+}
+
+function fetchPostComments(postId) {
+  return fetchData(`${BASE_URL}/posts/${postId}/comments`);
+}
+
+function setCommentsOnPost(post) {
+  // if we already have comments, don't fetch them again
+  if (post.comments) {
+    return Promise.reject(null);
+  }
+
+  // fetch, upgrade the post object, then return it
+  return fetchPostComments(post.id).then(function (comments) {
+    post.comments = comments;
+    return post;
+  });
+}
+
+function renderPost(post) {
+  return $(`<div class="post-card">
+    <header>
+      <h3>${post.title}</h3>
+      <h3>--- ${post.user.username}</h3>
+    </header>
+    <p>${post.body}</p>
+    <footer>
+      <div class="comment-list"></div>
+      <a href="#" class="toggle-comments">(<span class="verb">show</span> comments)</a>
+    </footer>
+  </div>`).data("post", post);
+}
+
+function renderPostList(postList) {
+  $("#app section.active").removeClass("active");
+  const postListElement = $("#post-list");
+  postListElement.empty().addClass("active");
+  postList.forEach(function (post) {
+    postListElement.append(renderPost(post));
+  });
+}
+
+function toggleComments(postCardElement) {
+  const footerElement = postCardElement.find("footer");
+  if (footerElement.hasClass("comments-open")) {
+    footerElement.removeClass("comments-open");
+    footerElement.find(".verb").text("show");
+  } else {
+    footerElement.addClass("comments-open");
+    footerElement.find(".verb").text("hide");
+  }
+}
+
 function bootstrap() {
   // move the line about fetchUsers into here
   fetchUsers().then(function (data) {
@@ -112,26 +167,60 @@ function bootstrap() {
 }
 
 // Listeners
+// loading user posts
 $("#user-list").on("click", ".user-card .load-posts", function () {
   // load posts for this user
   let element = $(this).closest(".user-card").data("user");
   console.log(element);
+
+  fetchUserPosts(element.id).then(renderPostList);
   // render posts for this user
 });
 
+// loading albums
 $("#user-list").on("click", ".user-card .load-albums", function () {
   // load albums for this user
   let element = $(this).closest(".user-card").data("user");
   fetchUserAlbumList(element.id).then(function (albumList) {
     renderAlbumList(albumList);
   });
-  // render albums for this user
+});
+
+// toggle comments button
+$("#post-list").on("click", ".post-card .toggle-comments", function () {
+  const postCardElement = $(this).closest(".post-card");
+  const post = postCardElement.data("post");
+  const commentListElement = postCardElement.find(".comment-list");
+
+  setCommentsOnPost(post)
+    .then(function (post) {
+      console.log("building comments for the first time...");
+      commentListElement.empty();
+      post.comments.forEach(function (comment) {
+        commentListElement.prepend(
+          $(`
+          <h3>${comment.body} --- ${comment.email}</h3>
+        `)
+        );
+      });
+      toggleComments(postCardElement);
+    })
+    .catch(function () {
+      console.log("comments previously existed, only toggling...");
+      toggleComments(postCardElement);
+    });
 });
 
 bootstrap();
 
-fetchUserAlbumList(5).then(function (albumList) {
-  console.log(albumList);
-});
+// fetchUserAlbumList(3).then(function (albumList) {
+//   console.log(albumList);
+// });
 
-fetchUserAlbumList(3).then(renderAlbumList);
+// fetchUserAlbumList(3).then(renderAlbumList);
+
+// fetchUserPosts(5).then(console.log); // why does this work?  Wait, what?
+
+// fetchPostComments(5).then(console.log); // again, I'm freaking out here! What gives!?
+
+// setCommentsOnPost(3);
